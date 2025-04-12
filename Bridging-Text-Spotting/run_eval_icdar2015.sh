@@ -1,0 +1,1 @@
+python tools/train_net.py --config-file configs/Bridge/ICDAR15/R_50_poly.yaml --eval-only MODEL.WEIGHTS Bridge_ic15.pth

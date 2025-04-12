@@ -1,0 +1,1 @@
+python demo/demo.py --config-file configs/Bridge/ICDAR15/R_50_poly.yaml --input /media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/datasets/icdar2015/train_images --output output/Bridge/icdar15 --opts MODEL.WEIGHTS Bridge_ic15.pth

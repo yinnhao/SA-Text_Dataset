@@ -1,0 +1,5 @@
+# ninja log v5
+1	809	1740716686626581932	/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/build/temp.linux-x86_64-cpython-310/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/adet/layers/csrc/cuda_version.o	68843cfca52d1737
+0	5725	1740716691526962785	/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/build/temp.linux-x86_64-cpython-310/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/adet/layers/csrc/DeformAttn/ms_deform_attn_cpu.o	5b515d7e9be6f69a
+1	18437	1740716704239943594	/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/build/temp.linux-x86_64-cpython-310/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/adet/layers/csrc/vision.o	10fcec2b324bd8a3
+0	21437	1740716707232172946	/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/build/temp.linux-x86_64-cpython-310/media/dataset1/jinlovespho/github/ocr/hyunbin_Bridging-Text-Spotting/adet/layers/csrc/DeformAttn/ms_deform_attn_cuda.o	7a356ff66201b0c5
