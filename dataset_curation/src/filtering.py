@@ -8,6 +8,113 @@ import copy
 
 from .utils import read_json, write_json, ensure_dir, read_text_list
 
+# --- Helper: Calculate Overlap (Copied from cropping.py for modularity) ---
+def calculate_overlap(region1, region2):
+    """Calculate the IoU of two regions [x1, y1, x2, y2]."""
+    x1 = max(region1[0], region2[0])
+    y1 = max(region1[1], region2[1])
+    x2 = min(region1[2], region2[2])
+    y2 = min(region1[3], region2[3])
+    if x2 <= x1 or y2 <= y1: return 0.0
+    intersection = (x2 - x1) * (y2 - y1)
+    area1 = (region1[2] - region1[0]) * (region1[3] - region1[1])
+    area2 = (region2[2] - region2[0]) * (region2[3] - region2[1])
+    if area1 <= 0 or area2 <= 0: return 0.0
+    union = area1 + area2 - intersection
+    return intersection / union if union > 0 else 0.0
+
+# --- NEW: Filter Duplicate Detections ---
+def filter_duplicate_detections(input_json_path, output_json_path, config, iou_threshold=0.9):
+    """
+    Filters out highly overlapping detections within the same image (crop).
+    Keeps the detection with the highest confidence score among duplicates.
+    Operates on the output of Bridge Stage 2.
+    """
+    logging.info(f"Filtering duplicate detections from: {input_json_path} (IoU Threshold: {iou_threshold})")
+    data = read_json(input_json_path)
+    if not data or "annotations" not in data or "images" not in data:
+        logging.error("Invalid JSON data for duplicate detection filtering.")
+        return None
+
+    annotations_in = data["annotations"]
+    annotations_by_image = defaultdict(list)
+    for ann in annotations_in:
+        # Ensure bbox is valid before adding
+        if isinstance(ann.get("bbox"), list) and len(ann["bbox"]) == 4:
+            annotations_by_image[ann['file_name']].append(ann)
+        else:
+            logging.warning(f"Skipping annotation ID {ann.get('id')} in {ann.get('file_name')} due to invalid bbox format: {ann.get('bbox')}")
+
+
+    final_annotations = []
+    duplicate_removed_count = 0
+    total_processed = 0
+
+    image_filenames = list(annotations_by_image.keys())
+    for filename in tqdm(image_filenames, desc="Filtering duplicates"):
+        img_annotations = annotations_by_image[filename]
+        n = len(img_annotations)
+        if n <= 1: # No duplicates possible if 0 or 1 annotation
+            final_annotations.extend(img_annotations)
+            total_processed += n
+            continue
+
+        # Sort by score descending to prioritize higher confidence boxes
+        img_annotations.sort(key=lambda x: x.get('score', 0.0), reverse=True)
+
+        kept_indices = set(range(n)) # Start assuming all are kept
+
+        for i in range(n):
+            if i not in kept_indices: continue # Skip if already marked for removal
+
+            bbox1 = img_annotations[i]["bbox"] # [x1, y1, x2, y2] format from Bridge Stage 2
+
+            for j in range(i + 1, n):
+                if j not in kept_indices: continue # Skip if already marked for removal
+
+                bbox2 = img_annotations[j]["bbox"]
+                overlap = calculate_overlap(bbox1, bbox2)
+
+                if overlap > iou_threshold:
+                    # High overlap found. Since we sorted by score,
+                    # annotation 'i' has higher or equal score than 'j'.
+                    # Mark 'j' for removal.
+                    kept_indices.remove(j)
+                    duplicate_removed_count += 1
+                    # logging.debug(f"Removing ann {img_annotations[j]['id']} (score {img_annotations[j]['score']:.3f}) due to overlap {overlap:.3f} with ann {img_annotations[i]['id']} (score {img_annotations[i]['score']:.3f}) in {filename}")
+
+        # Add annotations that were kept
+        kept_this_image = []
+        for idx in kept_indices:
+            kept_this_image.append(img_annotations[idx])
+
+        final_annotations.extend(kept_this_image)
+        total_processed += n
+
+
+    # Update image instance counts (optional but good practice)
+    final_annotations_by_image = defaultdict(list)
+    for ann in final_annotations:
+        final_annotations_by_image[ann['file_name']].append(ann)
+
+    updated_images = []
+    for img in data["images"]:
+        img_copy = copy.deepcopy(img)
+        img_copy['instances'] = len(final_annotations_by_image.get(img['file_name'], []))
+        # Only keep images that still have annotations after filtering
+        if img_copy['instances'] > 0:
+            updated_images.append(img_copy)
+        # else:
+            # logging.debug(f"Image {img['file_name']} removed (0 annotations after duplicate filtering).")
+
+
+    output_data = {
+        "images": updated_images,
+        "annotations": final_annotations
+    }
+    write_json(output_data, output_json_path)
+    logging.info(f"Duplicate detection filtering complete. Kept {len(final_annotations)} annotations (removed {duplicate_removed_count}). Output: {output_json_path}")
+    return output_json_path
 
 # --- Filter 1: Empty/Invalid VLM Results ---
 def filter_empty_vlm(input_json_path, output_json_path, config):

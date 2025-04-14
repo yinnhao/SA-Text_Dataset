@@ -1,12 +1,31 @@
 #!/bin/bash
-# Runs pipeline sequentially for subsets assigned to GPU 3
+# Runs pipeline sequentially for subsets assigned to GPU 7
 
 # --- Configuration ---
 CONFIG_FILE="config_2.yaml"
 PYTHON_SCRIPT="main_pipeline.py"
 CONDA_ENV_NAME="hyunbin"
-GPU_ID="3" # GPU assigned to this script
-SUBSETS_TO_PROCESS=("sa_000008") # Subsets for this GPU
+GPU_ID="1" # GPU assigned to this script
+SUBSETS_TO_PROCESS=("sa_000001" "sa_000003" "sa_000005") # Subsets for this GPU
+WAIT_DURATION="8h" # Wait duration (e.g., 8h, 10m, 30s)
+
+# --- Initial Message ---
+echo "#####################################################"
+echo "Script launched. Will wait for ${WAIT_DURATION} before starting processing."
+echo "Target GPU: ${GPU_ID}"
+echo "Target Subsets: ${SUBSETS_TO_PROCESS[*]}"
+echo "Config File: ${CONFIG_FILE}"
+echo "Current Time: $(date)"
+echo "#####################################################"
+
+# --- Wait for the specified duration ---
+sleep ${WAIT_DURATION}
+
+# --- Post-Wait Message ---
+echo "#####################################################"
+echo "Wait complete. Starting processing now."
+echo "Current Time: $(date)"
+echo "#####################################################"
 
 # --- Activate Conda Environment ---
 echo "Activating conda environment: $CONDA_ENV_NAME for GPU $GPU_ID"
@@ -59,10 +78,10 @@ done
 echo "#####################################################"
 if $overall_success; then
   echo "All assigned subsets for GPU $GPU_ID completed successfully."
-  # exit 0
+  exit 0
 else
   echo "One or more subsets failed for GPU $GPU_ID."
-  # exit 1
+  exit 1
 fi
 echo "#####################################################"
 

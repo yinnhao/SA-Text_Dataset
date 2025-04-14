@@ -2,11 +2,12 @@
 # Runs pipeline sequentially for subsets assigned to GPU 7
 
 # --- Configuration ---
-CONFIG_FILE="config.yaml"
+CONFIG_FILE="config_2.yaml"
 PYTHON_SCRIPT="main_pipeline.py"
 CONDA_ENV_NAME="hyunbin"
-GPU_ID="7" # GPU assigned to this script
-SUBSETS_TO_PROCESS=("sa_000018" "sa_000019" "sa_000020") # Subsets for this GPU
+GPU_ID="0" # GPU assigned to this script
+# SUBSETS_TO_PROCESS=("sa_000007" "sa_000019" "sa_000020") # Subsets for this GPU
+SUBSETS_TO_PROCESS=("sa_000007") # Subsets for this GPU
 
 # --- Activate Conda Environment ---
 echo "Activating conda environment: $CONDA_ENV_NAME for GPU $GPU_ID"
@@ -59,10 +60,10 @@ done
 echo "#####################################################"
 if $overall_success; then
   echo "All assigned subsets for GPU $GPU_ID completed successfully."
-  exit 0
+  # exit 0
 else
   echo "One or more subsets failed for GPU $GPU_ID."
-  exit 1
+  # exit 1
 fi
 echo "#####################################################"
 
