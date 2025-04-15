@@ -5,6 +5,7 @@ import re
 import pandas as pd
 from collections import defaultdict
 import copy
+from tqdm import tqdm
 
 from .utils import read_json, write_json, ensure_dir, read_text_list
 

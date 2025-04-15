@@ -16,6 +16,19 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)]
 )
 
+# --- ADDED: ensure_dir function ---
+def ensure_dir(path):
+    """Ensure a directory exists, creating it if necessary."""
+    if path and not os.path.exists(path):
+        try:
+            os.makedirs(path)
+            logging.info(f"Created directory: {path}")
+        except OSError as e:
+            logging.error(f"Error creating directory {path}: {e}")
+            raise # Re-raise the error if directory creation fails critically
+# --- END ADDED ---
+
+
 # --- Helper: Calculate Overlap ---
 def calculate_overlap(region1, region2):
     """Calculate the IoU of two regions [x1, y1, x2, y2]."""
@@ -35,27 +48,19 @@ def calculate_overlap(region1, region2):
 def filter_duplicates_in_dataset(input_json_path, output_json_path, iou_threshold=0.9, dry_run=False):
     """
     Filters duplicate text instances within each entry of a final dataset JSON file.
-
-    Args:
-        input_json_path (str): Path to the input dataset JSON file.
-        output_json_path (str): Path to save the filtered dataset JSON file.
-        iou_threshold (float): IoU threshold above which instances are considered duplicates.
-        dry_run (bool): If True, only report duplicates without writing the output file.
-
-    Returns:
-        bool: True if successful, False otherwise.
     """
     logging.info(f"Starting duplicate filtering for: {input_json_path}")
     logging.info(f"IoU Threshold: {iou_threshold}")
     if dry_run:
         logging.warning("--- DRY RUN MODE ENABLED: No output file will be written. ---")
 
-    # --- Read Input JSON ---
+    # --- Validate JSON file path ---
     input_path = Path(input_json_path)
     if not input_path.is_file():
         logging.error(f"Error: Input JSON file not found at '{input_json_path}'")
         return False
 
+    # --- Read JSON and extract valid filenames ---
     try:
         with open(input_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -81,62 +86,46 @@ def filter_duplicates_in_dataset(input_json_path, output_json_path, iou_threshol
         n = len(original_instances)
         total_instances_before += n
 
-        if n <= 1: # No duplicates possible
-            filtered_entries.append(copy.deepcopy(entry)) # Append unchanged entry
+        if n <= 1:
+            filtered_entries.append(copy.deepcopy(entry))
             total_instances_after += n
             continue
 
-        # Sort by score descending to prioritize higher confidence boxes
-        # Use .get with default 0.0 for score robustness
         try:
             sorted_instances = sorted(original_instances, key=lambda x: x.get('score', 0.0), reverse=True)
         except Exception as sort_e:
              logging.error(f"Error sorting instances in entry {entry.get('crop_id', 'Unknown')}: {sort_e}. Skipping entry.")
-             # Optionally append the original entry if you want to keep it despite sorting error
-             # filtered_entries.append(copy.deepcopy(entry))
-             # total_instances_after += n
              continue
 
-
-        kept_indices = set(range(n)) # Start assuming all are kept
+        kept_indices = set(range(n))
         entry_duplicates_removed = 0
 
         for i in range(n):
             if i not in kept_indices: continue
-
-            # Check if instance i has a valid bbox
             bbox1 = sorted_instances[i].get("bbox")
             if not (isinstance(bbox1, list) and len(bbox1) == 4):
                 logging.warning(f"Instance {sorted_instances[i].get('id', 'N/A')} in {entry.get('crop_id')} has invalid bbox. Cannot check for duplicates.")
-                continue # Cannot compare this instance
+                continue
 
             for j in range(i + 1, n):
                 if j not in kept_indices: continue
-
-                # Check if instance j has a valid bbox
                 bbox2 = sorted_instances[j].get("bbox")
                 if not (isinstance(bbox2, list) and len(bbox2) == 4):
                     logging.warning(f"Instance {sorted_instances[j].get('id', 'N/A')} in {entry.get('crop_id')} has invalid bbox. Skipping comparison.")
-                    continue # Cannot compare with this instance
+                    continue
 
                 overlap = calculate_overlap(bbox1, bbox2)
-
                 if overlap > iou_threshold:
-                    # High overlap: Remove instance j (lower score or later in sorted list)
                     kept_indices.remove(j)
                     entry_duplicates_removed += 1
                     if dry_run:
-                         # Log details in dry run
-                         inst_i = sorted_instances[i]
-                         inst_j = sorted_instances[j]
+                         inst_i = sorted_instances[i]; inst_j = sorted_instances[j]
                          logging.info(f"[Dry Run] Would remove instance id={inst_j.get('id','N/A')} (score={inst_j.get('score',0):.3f}) "
                                       f"due to overlap {overlap:.3f} with id={inst_i.get('id','N/A')} (score={inst_i.get('score',0):.3f}) "
                                       f"in crop {entry.get('crop_id')}")
 
-
-        # Create new entry with filtered instances
-        new_entry = copy.deepcopy(entry) # Copy other fields like crop_id, blur_category etc.
-        new_entry["text_instances"] = [sorted_instances[idx] for idx in sorted(list(kept_indices))] # Keep in original relative order if needed, or just list(kept_indices)
+        new_entry = copy.deepcopy(entry)
+        new_entry["text_instances"] = [sorted_instances[idx] for idx in sorted(list(kept_indices))]
         filtered_entries.append(new_entry)
         total_duplicates_removed += entry_duplicates_removed
         total_instances_after += len(new_entry["text_instances"])
@@ -147,7 +136,9 @@ def filter_duplicates_in_dataset(input_json_path, output_json_path, iou_threshol
     if not dry_run:
         try:
             output_path = Path(output_json_path)
-            ensure_dir(output_path.parent) # Ensure output directory exists
+            # --- Use the ensure_dir function defined above ---
+            ensure_dir(output_path.parent)
+            # --- End change ---
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
             logging.info(f"Filtered dataset saved to: {output_json_path}")
@@ -175,33 +166,22 @@ def filter_duplicates_in_dataset(input_json_path, output_json_path, iou_threshol
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Filter duplicate text instances from a final dataset JSON based on IoU.",
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+Example Usage:
+  Dry Run (Recommended First):
+    python filter_final_duplicates.py --input_json /path/to/outputs/final_dataset_SUFFIX/restoration_dataset_SUFFIX.json --dry-run
+
+  Actual Deletion (Use with caution!):
+    python filter_final_duplicates.py --input_json /path/to/outputs/final_dataset_SUFFIX/restoration_dataset_SUFFIX.json
+"""
     )
-    parser.add_argument(
-        "--input_json",
-        required=True,
-        help="Path to the input dataset JSON file (e.g., full_dataset_SUFFIX.json)."
-    )
-    parser.add_argument(
-        "--output_json",
-        default=None,
-        help="Path to save the filtered output JSON file. "
-             "Defaults to appending '_no_duplicates' to the input filename."
-    )
-    parser.add_argument(
-        "--iou_threshold",
-        type=float,
-        default=0.9,
-        help="IoU threshold for considering instances as duplicates (default: 0.9)."
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Perform a dry run. List duplicates that would be removed without writing output."
-    )
+    parser.add_argument("--input_json", required=True, help="Path to the input dataset JSON file")
+    parser.add_argument("--output_json", default=None, help="Path to save the filtered output JSON file. Defaults to appending '_no_duplicates'.")
+    parser.add_argument("--iou_threshold", type=float, default=0.9, help="IoU threshold for considering instances as duplicates (default: 0.9).")
+    parser.add_argument("--dry-run", action="store_true", help="Perform a dry run.")
     args = parser.parse_args()
 
-    # Determine output path if not provided
     output_path = args.output_json
     if output_path is None:
         in_path = Path(args.input_json)
@@ -209,11 +189,11 @@ if __name__ == "__main__":
 
     success = filter_duplicates_in_dataset(
         args.input_json,
-        str(output_path), # Convert Path object back to string if needed
+        str(output_path),
         args.iou_threshold,
         args.dry_run
     )
 
     if not success and not args.dry_run:
-        sys.exit(1) # Exit with error code if filtering failed
-    sys.exit(0) # Exit successfully
+        sys.exit(1)
+    sys.exit(0)
