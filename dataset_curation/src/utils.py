@@ -134,7 +134,6 @@ def find_image_paths_os(directory, extensions=None):
     valid_extensions = tuple(ext.lower() for ext in extensions if isinstance(ext, str) and ext.startswith('.'))
     if not os.path.isdir(directory):
         raise FileNotFoundError(f"Directory not found: {directory}")
-    # logging.debug(f"Searching for images with extensions {valid_extensions} in '{directory}'") # REMOVED DEBUG
     count = 0
     for root, _, files in os.walk(directory):
         for filename in files:

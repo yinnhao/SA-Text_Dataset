@@ -37,8 +37,7 @@ def run_bridge(config, input_dir, output_dir, stage1=True):
     cmd = base_cmd + opts_cmd
     cmd = [str(c) for c in cmd]
 
-    # logging.info(f"Running Bridge {'Stage 1' if stage1 else 'Stage 2'}...") # Included in time_step
-    logging.info(f"Command: {shlex.join(cmd)}") # Keep command log
+    logging.info(f"Command: {shlex.join(cmd)}") 
 
     try:
         result = subprocess.run(
@@ -51,16 +50,14 @@ def run_bridge(config, input_dir, output_dir, stage1=True):
             stderr_log = result.stderr.strip()
             if len(stdout_log) > 1000: stdout_log = "[...] " + stdout_log[-1000:]
             if len(stderr_log) > 1000: stderr_log = "[...] " + stderr_log[-1000:]
-            if stdout_log: logging.debug(f"Bridge stdout:\n{stdout_log}") # Log as DEBUG
-            if stderr_log: logging.warning(f"Bridge stderr:\n{stderr_log}") # Log stderr as WARNING
+            if stdout_log: logging.debug(f"Bridge stdout:\n{stdout_log}") 
+            if stderr_log: logging.warning(f"Bridge stderr:\n{stderr_log}") 
 
         if os.path.exists(output_json_path):
-            # logging.info(f"Bridge {'Stage 1' if stage1 else 'Stage 2'} completed. Output: {output_json_path}") # Included in time_step
             return output_json_path
         else:
-            time.sleep(0.5) # Check again after delay
+            time.sleep(0.5) 
             if os.path.exists(output_json_path):
-                # logging.info(f"Bridge {'Stage 1' if stage1 else 'Stage 2'} completed (after delay). Output: {output_json_path}") # Included in time_step
                 return output_json_path
             else:
                 logging.error(f"Bridge command ran but output file not found: {output_json_path}")

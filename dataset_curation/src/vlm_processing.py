@@ -15,7 +15,6 @@ try:
     from transformers import AutoModelForCausalLM, AutoProcessor, Qwen2_5_VLForConditionalGeneration
     from qwen_vl_utils import process_vision_info  # Assuming this is available
 except ImportError as e:
-    # Keep this warning as it's critical for functionality
     logging.warning(f"Could not import VLM libraries ({e}). VLM processing will fail if attempted.")
     AutoModelForCausalLM = None
     AutoProcessor = None
@@ -36,12 +35,10 @@ def _crop_tight(image, bbox):
         x2 = min(width, int(x2))
         y2 = min(height, int(y2))
         if x1 >= x2 or y1 >= y2:
-            # Log only critical warnings/errors
-            # logging.warning(f"Invalid bbox after clipping: {[x1, y1, x2, y2]}...") # Removed
             return None
         return image.crop((x1, y1, x2, y2))
     except Exception as e:
-        logging.error(f"Error during tight cropping with bbox {bbox}: {e}") # Keep Error
+        logging.error(f"Error during tight cropping with bbox {bbox}: {e}") 
         return None
 
 
@@ -49,7 +46,7 @@ def _crop_tight(image, bbox):
 def _ovis_two_stage_inference(model, text_tokenizer, visual_tokenizer, image_tensor):
     """Performs OVIS two-stage inference (text check + OCR). Minimal logging."""
     if not model or not text_tokenizer or not visual_tokenizer:
-        logging.error("OVIS model/tokenizers not loaded.") # Keep Error
+        logging.error("OVIS model/tokenizers not loaded.") 
         return "Error: Model Load", False
     text_check = "Identify whether there is any text in the image. Answer with only 'yes' or 'no'."
     query = f'<image>\n{text_check}'
@@ -80,7 +77,7 @@ def _ovis_two_stage_inference(model, text_tokenizer, visual_tokenizer, image_ten
             extracted_text = text_tokenizer.decode(output_ids, skip_special_tokens=True)
         return extracted_text, True
     except Exception as e:
-        logging.error(f"Error during OVIS inference: {e}") # Keep Error
+        logging.error(f"Error during OVIS inference: {e}") 
         return "Error: Model Inference", False
 
 
@@ -88,7 +85,7 @@ def _ovis_two_stage_inference(model, text_tokenizer, visual_tokenizer, image_ten
 def _qwen_two_stage_inference(model, processor, image):
     """Performs Qwen two-stage inference (text check + OCR). Minimal logging."""
     if not model or not processor or not process_vision_info:
-        logging.error("Qwen model/processor not loaded or qwen_vl_utils missing.") # Keep Error
+        logging.error("Qwen model/processor not loaded or qwen_vl_utils missing.") 
         return "Error: Model Load", False
     messages_check = [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": "Identify whether there is any text in the image. Answer with only 'yes' or 'no'."}]}]
     try:
@@ -113,7 +110,7 @@ def _qwen_two_stage_inference(model, processor, image):
             extracted_text = processor.batch_decode(generated_ids_trimmed_extract, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         return extracted_text, True
     except Exception as e:
-        logging.error(f"Error during Qwen inference: {e}") # Keep Error
+        logging.error(f"Error during Qwen inference: {e}") 
         return "Error: Model Inference", False
 
 
@@ -121,13 +118,12 @@ def _qwen_two_stage_inference(model, processor, image):
 def run_vlm_recognition(model_name, annotations_json_path, crop_image_dir, output_json_path, config):
     """Runs VLM recognition on text instances. Minimal logging."""
     if not AutoModelForCausalLM:
-        logging.error("Transformers library not available.") # Keep Error
+        logging.error("Transformers library not available.")
         return None
-    # Keep Start Info
     logging.info(f"Starting VLM Recognition using {model_name}...")
     data = read_json(annotations_json_path)
     if not data or "images" not in data or "annotations" not in data:
-        logging.error("Invalid annotations JSON data for VLM recognition.") # Keep Error
+        logging.error("Invalid annotations JSON data for VLM recognition.") 
         return None
 
     model = None
@@ -139,16 +135,16 @@ def run_vlm_recognition(model_name, annotations_json_path, crop_image_dir, outpu
             model = AutoModelForCausalLM.from_pretrained("AIDC-AI/Ovis2-8B", torch_dtype=torch.bfloat16, multimodal_max_length=32768, trust_remote_code=True).cuda()
             text_tokenizer = model.get_text_tokenizer()
             visual_tokenizer = model.get_visual_tokenizer()
-            logging.info("OVIS model loaded.") # Keep Info
+            logging.info("OVIS model loaded.") 
         elif model_name.upper() == "QWEN":
             model = Qwen2_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", device_map="auto")
             processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
-            logging.info("Qwen model loaded.") # Keep Info
+            logging.info("Qwen model loaded.") 
         else:
-            logging.error(f"Unsupported VLM model name: {model_name}") # Keep Error
+            logging.error(f"Unsupported VLM model name: {model_name}") 
             return None
     except Exception as e:
-        logging.error(f"Failed to load {model_name} model: {e}") # Keep Error
+        logging.error(f"Failed to load {model_name} model: {e}") 
         return None
 
     enriched_annotations = []
@@ -173,7 +169,7 @@ def run_vlm_recognition(model_name, annotations_json_path, crop_image_dir, outpu
                 error_count += 1
                 continue # Skip silently
             except Exception as e:
-                logging.error(f"Failed load image {image_path}: {e}. Skipping ann {annotation.get('id', 'N/A')}.") # Keep Error
+                logging.error(f"Failed load image {image_path}: {e}. Skipping ann {annotation.get('id', 'N/A')}.") 
                 error_count += 1
                 continue
         else:
@@ -193,7 +189,7 @@ def run_vlm_recognition(model_name, annotations_json_path, crop_image_dir, outpu
             elif model_name.upper() == "QWEN":
                 vlm_text, has_text = _qwen_two_stage_inference(model, processor, tight_crop_img)
         except Exception as e:
-            logging.error(f"Inference failed for ann {annotation.get('id', 'N/A')}: {e}") # Keep Error
+            logging.error(f"Inference failed for ann {annotation.get('id', 'N/A')}: {e}") 
             vlm_text = "Error: Inference Exception"
             has_text = False
             error_count += 1
@@ -203,18 +199,15 @@ def run_vlm_recognition(model_name, annotations_json_path, crop_image_dir, outpu
         new_annotation['has_text'] = has_text
         enriched_annotations.append(new_annotation)
 
-        # --- REMOVED Progress Logging ---
-
     output_data = {"images": data["images"], "annotations": enriched_annotations}
     write_json(output_data, output_json_path)
-    # Keep Summary Info
     logging.info(f"{model_name} recognition complete. Annotations processed: {processed_count}, Errors/Skipped: {error_count}. Output saved to: {output_json_path}")
 
     # Cleanup
     del model, processor, text_tokenizer, visual_tokenizer
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    logging.info(f"{model_name} model unloaded.") # Keep Info
+    logging.info(f"{model_name} model unloaded.") 
     return output_json_path
 
 
@@ -222,7 +215,7 @@ def run_vlm_recognition(model_name, annotations_json_path, crop_image_dir, outpu
 def _qwen_check_blurriness(model, processor, image, inverse_prompt_flag):
     """Internal function for blur/sharpness classification. Minimal logging."""
     if not model or not processor or not process_vision_info:
-        logging.error("Qwen model/processor not loaded or qwen_vl_utils missing.") # Keep Error
+        logging.error("Qwen model/processor not loaded or qwen_vl_utils missing.") 
         return "Error: Model Load"
     prompt_text = ("""
         You are an image quality inspector. Classify the image into one of the following levels based on its sharpness:
@@ -259,7 +252,7 @@ def _qwen_check_blurriness(model, processor, image, inverse_prompt_flag):
             else:
                 return "Error: Unknown Category"
     except Exception as e:
-        logging.error(f"Error during Qwen blur inference: {e}") # Keep Error
+        logging.error(f"Error during Qwen blur inference: {e}") 
         return "Error: Model Inference"
 
 
@@ -267,15 +260,14 @@ def _qwen_check_blurriness(model, processor, image, inverse_prompt_flag):
 def run_blur_assessment(agreed_filenames, crop_image_dir, output_csv_path, config):
     """Runs blur assessment using Qwen ONLY on the provided list of crop filenames. Minimal logging."""
     if not Qwen2_5_VLForConditionalGeneration:
-        logging.error("Transformers library not available.") # Keep Error
+        logging.error("Transformers library not available.") 
         return None
     if not agreed_filenames:
-        logging.warning("No agreed filenames provided for blur assessment. Skipping.") # Keep Warning
+        logging.warning("No agreed filenames provided for blur assessment. Skipping.") 
         return None
 
     blur_vlm_name = config.get('blur_vlm_name', 'Qwen')
     run_identifier = f"{blur_vlm_name}_Blur"
-    # Keep Start Info
     logging.info(f"Starting Blur Assessment using {blur_vlm_name} on {len(agreed_filenames)} agreed crops...")
     inverse_prompt_flag = config.get('blur_inverse_prompt', False)
 
@@ -284,9 +276,9 @@ def run_blur_assessment(agreed_filenames, crop_image_dir, output_csv_path, confi
     try:
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", device_map="auto")
         processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
-        logging.info("Qwen model loaded for blur assessment.") # Keep Info
+        logging.info("Qwen model loaded for blur assessment.") 
     except Exception as e:
-        logging.error(f"Failed to load Qwen model for blur assessment: {e}") # Keep Error
+        logging.error(f"Failed to load Qwen model for blur assessment: {e}") 
         return None
 
     start_time = time.time()
@@ -295,12 +287,10 @@ def run_blur_assessment(agreed_filenames, crop_image_dir, output_csv_path, confi
     error_count = 0
     skipped_images = []
 
-    # Keep Progress Bar
     for filename_key in tqdm.tqdm(agreed_filenames, desc=f"Assessing Blur ({run_identifier})"):
         image_path = os.path.join(crop_image_dir, filename_key)
         relative_path = filename_key
         try:
-            # logging.debug(f"Processing {filename_key} for blur") # REMOVED
             with Image.open(image_path) as img:
                 image = img.convert('RGB')
             raw_model_category = _qwen_check_blurriness(model, processor, image, inverse_prompt_flag)
@@ -327,20 +317,19 @@ def run_blur_assessment(agreed_filenames, crop_image_dir, output_csv_path, confi
             skipped_images.append(relative_path)
             current_run_results[filename_key] = "Error: File Not Found"
         except Exception as loop_err:
-            logging.error(f"Unexpected error processing {image_path} for blur: {loop_err}") # Keep Error
+            logging.error(f"Unexpected error processing {image_path} for blur: {loop_err}") 
             error_count += 1
             skipped_images.append(relative_path)
             current_run_results[filename_key] = "Error: Processing Loop"
 
     if current_run_results:
         category_counts = Counter(current_run_results.values())
-        # Keep Summary Info
         logging.info(f"\n--- Blur Assessment Counts ('{run_identifier}') ---")
         for category, count in sorted(category_counts.items()):
             logging.info(f"  {category}: {count}")
         logging.info("-----------------------------------------")
     else:
-        logging.warning("No blur assessment results generated.") # Keep Warning
+        logging.warning("No blur assessment results generated.") 
         del model, processor
         if torch.cuda.is_available(): torch.cuda.empty_cache()
         return None
@@ -352,9 +341,9 @@ def run_blur_assessment(agreed_filenames, crop_image_dir, output_csv_path, confi
     try:
         ensure_dir(os.path.dirname(output_csv_path))
         merged_df.to_csv(output_csv_path, index=False, encoding='utf-8', na_rep='')
-        logging.info(f"Successfully saved blur assessment results to {output_csv_path}") # Keep Info
+        logging.info(f"Successfully saved blur assessment results to {output_csv_path}")
     except Exception as e:
-        logging.error(f"Error saving blur CSV to {output_csv_path}: {e}") # Keep Error
+        logging.error(f"Error saving blur CSV to {output_csv_path}: {e}") 
 
     total_time = time.time() - start_time
     # Keep Summary Info Block
@@ -370,5 +359,5 @@ def run_blur_assessment(agreed_filenames, crop_image_dir, output_csv_path, confi
     del model, processor
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-    logging.info("Qwen model for blur assessment unloaded.") # Keep Info
+    logging.info("Qwen model for blur assessment unloaded.")
     return output_csv_path

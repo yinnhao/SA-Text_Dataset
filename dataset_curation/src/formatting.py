@@ -13,16 +13,15 @@ def format_final_dataset(input_json_path, output_json_path, config):
     Formats the final filtered annotations into the desired dataset structure,
     adding a top-level 'blur_category' tag to each entry. Minimal logging.
     """
-    # logging.info(f"Formatting final dataset from: {input_json_path} -> {output_json_path}") # Included in time_step
     data = read_json(input_json_path)
     if data is None:
-        logging.error(f"Failed to read input JSON for formatting: {input_json_path}") # Keep Error
+        logging.error(f"Failed to read input JSON for formatting: {input_json_path}") 
         return None
     if "images" not in data or "annotations" not in data:
         if "images" in data and "annotations" in data:
             pass
         else:
-            logging.error(f"Invalid JSON data structure in {input_json_path} for final formatting.") # Keep Error
+            logging.error(f"Invalid JSON data structure in {input_json_path} for final formatting.") 
             return None
 
     crop_size = config['crop_size']
@@ -33,7 +32,6 @@ def format_final_dataset(input_json_path, output_json_path, config):
         annotations_by_image[ann["file_name"]].append(ann)
     images_map = {img["file_name"]: img for img in data["images"]}
 
-    # Keep Progress Bar
     for img_dict in tqdm(data["images"], desc=f"Formatting {os.path.basename(output_json_path)}"):
         crop_filename = img_dict["file_name"]
         crop_annotations = annotations_by_image.get(crop_filename, [])
@@ -65,6 +63,5 @@ def format_final_dataset(input_json_path, output_json_path, config):
 
     final_output_data = {"entries": dataset_entries}
     write_json(final_output_data, output_json_path)
-    # Keep Summary Info
     logging.info(f"Final dataset formatting complete for {os.path.basename(output_json_path)}. Created {len(dataset_entries)} entries.")
     return output_json_path

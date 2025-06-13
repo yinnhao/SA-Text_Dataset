@@ -55,6 +55,13 @@ def main():
         choices=valid_stages,
         help="Stage to start the pipeline from. Assumes previous stages are complete and outputs exist."
     )
+    parser.add_argument(
+        "--run_only_stage",
+        type=str,
+        default=None,
+        choices=valid_stages,
+        help="Run ONLY the specified stage and then exit successfully. Requires appropriate --start_from setting."
+    )
     args = parser.parse_args()
 
     # --- Load Configuration FIRST ---
@@ -98,6 +105,7 @@ def main():
 
     # Define intermediate/final file paths
     stage1_json = os.path.join(intermediate_dir, f"bridge_stage1_results{output_suffix}.json")
+    crop_definitions_path = os.path.join(intermediate_dir, f"crop_definitions{output_suffix}.json")
     stage2_raw_json = os.path.join(intermediate_dir, f"bridge_stage2_raw_results{output_suffix}.json") # Rename stage 2 output
     stage2_filtered_json = os.path.join(intermediate_dir, f"bridge_stage2_filtered_results{output_suffix}.json") # New file after duplicate filter
     vlm1_raw_json = os.path.join(intermediate_dir, f"{config['vlm1_name']}_raw{output_suffix}.json")
@@ -114,6 +122,18 @@ def main():
     restoration_dataset_final_json = os.path.join(final_dataset_output_dir, f"restoration_dataset{output_suffix}.json")
 
     pipeline_steps = {}
+
+    if args.run_only_stage:
+        try:
+            start_idx = valid_stages.index(args.start_from)
+            only_idx = valid_stages.index(args.run_only_stage)
+            if only_idx < start_idx:
+                 logging.error(f"--run_only_stage ('{args.run_only_stage}') cannot be earlier than --start_from ('{args.start_from}')")
+                 sys.exit(1)
+            logging.info(f"Pipeline configured to run ONLY stage: '{args.run_only_stage}' and then exit.")
+        except ValueError:
+            logging.error(f"Invalid stage name provided for --start_from or --run_only_stage.")
+            sys.exit(1)
 
     try:
         start_index = valid_stages.index(args.start_from)
@@ -135,12 +155,12 @@ def main():
         def check_and_set(key, path):
             nonlocal required_ok
             if not os.path.exists(path): logging.error(f"Missing required input for stage '{stage_name}': {path}"); required_ok = False
-            else: pipeline_steps[key] = path
+            # else: pipeline_steps[key] = path
             return required_ok
         def check_dir_and_set(key, path):
              nonlocal required_ok
              if not os.path.isdir(path) or not os.listdir(path): logging.error(f"Missing required input for stage '{stage_name}': Populated directory {path}"); required_ok = False
-             else: pipeline_steps[key] = path
+            #  else: pipeline_steps[key] = path
              return required_ok
 
         if stage_name == 'cropping': check_and_set('stage1_json', stage1_json)
@@ -181,6 +201,7 @@ def main():
             check_required_inputs(args.start_from)
 
         # --- Step 1: Bridge Stage 1 ---
+        current_stage_name = 'start'
         if should_run('start'):
             stage1_output_dir = os.path.join(intermediate_dir, "bridge_stage1")
             pipeline_steps['stage1_json_temp'] = time_step(
@@ -197,28 +218,51 @@ def main():
                  logging.warning(f"Target Stage 1 JSON {stage1_json} already exists. Using existing file.")
                  pipeline_steps['stage1_json'] = stage1_json
             else: raise RuntimeError(f"Bridge Stage 1 output JSON not found at expected location: {expected_stage1_output}")
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
         elif 'stage1_json' not in pipeline_steps:
              pipeline_steps['stage1_json'] = stage1_json
 
 
         # --- Step 2 & 3: Cropping ---
+        current_stage_name = 'cropping'
         if should_run('cropping'):
+            # --- Step 2: Define Crop Regions ---
+            step2_name = f"Step 2: Define Crop Regions [{config['sa1b_subfolder']}]"
             crop_definitions = time_step(
                 f"Step 2: Define Crop Regions [{config['sa1b_subfolder']}]",
                 cropping.define_crop_regions, pipeline_steps['stage1_json'], config
             )
-            time_step(
-                f"Step 3: Create Crop Images [{config['sa1b_subfolder']}]",
-                cropping.create_crop_images, crop_definitions, sa1b_input_dir, crop_image_dir, config
-            )
-            pipeline_steps['crop_image_dir'] = crop_image_dir
+            crop_definitions_output_path = os.path.join(intermediate_dir, f"crop_definitions{output_suffix}.json")
+            if crop_definitions:
+                utils.write_json(crop_definitions, crop_definitions_output_path)
+                logging.info(f"Saved crop definitions to: {crop_definitions_output_path}")
+            else:
+                logging.warning("No crop definitions were generated in Step 2. Nothing saved.")
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}' (defined crops). Exiting pipeline.")
+                sys.exit(0)
+            
+            # --- Step 3: Create Crop Images ---
+            step3_name = f"Step 3: Create Crop Images [{config['sa1b_subfolder']}]"
+            if crop_definitions: # Only run if definitions were created
+                 time_step(
+                    step3_name,
+                    cropping.create_crop_images, crop_definitions, sa1b_input_dir, crop_image_dir, config
+                 )
+                 pipeline_steps['crop_image_dir'] = crop_image_dir
+            else:
+                 logging.warning(f"Skipping '{step3_name}' because crop definitions were empty.")
         elif 'crop_image_dir' not in pipeline_steps:
              pipeline_steps['crop_image_dir'] = crop_image_dir
 
 
         # --- Step 4: Bridge Stage 2 ---
+        current_stage_name = 'bridge_stage2'
         if should_run('bridge_stage2'):
             stage2_output_dir = os.path.join(intermediate_dir, "bridge_stage2")
+            step4_name = f"Step 4: Bridge Detection (Stage 2 on Crops) [{config['sa1b_subfolder']}]"
             pipeline_steps['stage2_raw_json_temp'] = time_step(f"Step 4: Bridge Detection (Stage 2 on Crops) [{config['sa1b_subfolder']}]", bridge_runner.run_bridge, config, pipeline_steps['crop_image_dir'], stage2_output_dir, stage1=False)
             expected_stage2_output = os.path.join(stage2_output_dir, "text_detection_results.json")
             if os.path.exists(expected_stage2_output):
@@ -230,9 +274,14 @@ def main():
                  logging.warning(f"Target Stage 2 RAW JSON {stage2_raw_json} already exists. Using existing file.")
                  pipeline_steps['stage2_raw_json'] = stage2_raw_json
             else: raise RuntimeError(f"Bridge Stage 2 output JSON not found at expected location: {expected_stage2_output}")
+            
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
         elif 'stage2_raw_json' not in pipeline_steps: pipeline_steps['stage2_raw_json'] = stage2_raw_json
 
         # --- ADDED: Step 4.5: Filter Duplicate Detections ---
+        current_stage_name = 'filter_duplicates'
         if should_run('filter_duplicates'):
             pipeline_steps['stage2_filtered_json'] = time_step(
                 f"Step 4.5: Filter Duplicate Detections [{config['sa1b_subfolder']}]",
@@ -242,11 +291,15 @@ def main():
                 config,
                 iou_threshold=args.duplicate_iou_thresh # Pass threshold from args
             )
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
         elif 'stage2_filtered_json' not in pipeline_steps: pipeline_steps['stage2_filtered_json'] = stage2_filtered_json
         # --- END ADDED ---
 
 
         # --- Step 5: VLM 1 Recognition ---
+        current_stage_name = 'vlm1_recognition'
         if should_run('vlm1_recognition'):
             pipeline_steps['vlm1_raw_json'] = time_step(
                 f"Step 5: VLM Recognition ({config['vlm1_name']}) [{config['sa1b_subfolder']}]",
@@ -255,9 +308,15 @@ def main():
                 pipeline_steps['stage2_filtered_json'], # Use FILTERED stage 2 results
                 pipeline_steps['crop_image_dir'], vlm1_raw_json, config
             )
+
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
+
         elif 'vlm1_raw_json' not in pipeline_steps: pipeline_steps['vlm1_raw_json'] = vlm1_raw_json
 
         # --- Step 6: VLM 2 Recognition ---
+        current_stage_name = 'vlm2_recognition'
         if should_run('vlm2_recognition'):
             pipeline_steps['vlm2_raw_json'] = time_step(
                 f"Step 6: VLM Recognition ({config['vlm2_name']}) [{config['sa1b_subfolder']}]",
@@ -266,87 +325,129 @@ def main():
                 pipeline_steps['stage2_filtered_json'], # Use FILTERED stage 2 results
                 pipeline_steps['crop_image_dir'], vlm2_raw_json, config
             )
+
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
+
         elif 'vlm2_raw_json' not in pipeline_steps: pipeline_steps['vlm2_raw_json'] = vlm2_raw_json
 
 
         # --- Step 7 & 8: Filter VLM Results ---
+        current_stage_name = 'vlm_filtering'
         if should_run('vlm_filtering'):
+            step7_name = f"Step 7: Filter Empty VLM Results ({config['vlm1_name']}) [{config['sa1b_subfolder']}]"
             pipeline_steps['vlm1_filtered_json'] = time_step(
                 f"Step 7: Filter Empty VLM Results ({config['vlm1_name']}) [{config['sa1b_subfolder']}]",
                 filtering.filter_empty_vlm, pipeline_steps['vlm1_raw_json'], vlm1_filtered_json, config
             )
+            step8_name = f"Step 8: Filter Empty VLM Results ({config['vlm2_name']}) [{config['sa1b_subfolder']}]"
             pipeline_steps['vlm2_filtered_json'] = time_step(
                 f"Step 8: Filter Empty VLM Results ({config['vlm2_name']}) [{config['sa1b_subfolder']}]",
                 filtering.filter_empty_vlm, pipeline_steps['vlm2_raw_json'], vlm2_filtered_json, config
             )
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
         elif 'vlm1_filtered_json' not in pipeline_steps:
              pipeline_steps['vlm1_filtered_json'] = vlm1_filtered_json
              pipeline_steps['vlm2_filtered_json'] = vlm2_filtered_json
 
 
         # --- Step 9: Compare & Merge VLMs ---
+        current_stage_name = 'vlm_comparison'
         if should_run('vlm_comparison'):
+            step9_name = f"Step 9: Compare & Merge VLMs [{config['sa1b_subfolder']}]"
             pipeline_steps['combined_json'] = time_step(
                 f"Step 9: Compare & Merge VLMs [{config['sa1b_subfolder']}]",
                 filtering.compare_and_merge_vlms, pipeline_steps['vlm1_filtered_json'], pipeline_steps['vlm2_filtered_json'], combined_json, config
             )
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
         elif 'combined_json' not in pipeline_steps:
              pipeline_steps['combined_json'] = combined_json
 
 
         # --- Step 10 & 11: Agreement Extraction ---
+        current_stage_name = 'agreement_extraction'
         if should_run('agreement_extraction'):
+            step10_name = f"Step 10: Identify Fully Agreed Images [{config['sa1b_subfolder']}]"
             pipeline_steps['agreed_list_txt'] = time_step(
                 f"Step 10: Identify Fully Agreed Images [{config['sa1b_subfolder']}]",
                 filtering.identify_agreed_images, pipeline_steps['combined_json'], agreed_list_txt, config
             )
+            step11_name = f"Step 11: Extract Agreed Annotations [{config['sa1b_subfolder']}]"
             pipeline_steps['agreed_json'] = time_step(
                 f"Step 11: Extract Agreed Annotations [{config['sa1b_subfolder']}]",
                 filtering.extract_agreed_annotations, pipeline_steps['combined_json'], pipeline_steps['agreed_list_txt'], agreed_json, config
             )
+
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
         elif 'agreed_list_txt' not in pipeline_steps:
              pipeline_steps['agreed_list_txt'] = agreed_list_txt
              pipeline_steps['agreed_json'] = agreed_json
 
 
         # --- Step 12: Assess Blur ---
+        current_stage_name = 'blur_assessment'
         if should_run('blur_assessment'):
             agreed_filenames_list = utils.read_text_list(pipeline_steps['agreed_list_txt'])
             if agreed_filenames_list is None:
                 raise RuntimeError("Failed to read agreed image list for blur assessment.")
+            step12_name = f"Step 12: Assess Crop Blurriness (Agreed Crops) [{config['sa1b_subfolder']}]"            
             pipeline_steps['blur_csv'] = time_step(
                 f"Step 12: Assess Crop Blurriness (Agreed Crops) [{config['sa1b_subfolder']}]",
                 vlm_processing.run_blur_assessment, agreed_filenames_list, pipeline_steps['crop_image_dir'], blur_csv, config
             )
+
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
+
         elif 'blur_csv' not in pipeline_steps:
              pipeline_steps['blur_csv'] = blur_csv
 
 
         # --- Step 13: Tag and Filter by Blur ---
+        current_stage_name = 'blur_tag_filter'
         if should_run('blur_tag_filter'):
+            step13a_name = f"Step 13a: Tag Images with Blur Category [{config['sa1b_subfolder']}]"
             pipeline_steps['tagged_json_intermediate'] = time_step(
                 f"Step 13a: Tag Images with Blur Category [{config['sa1b_subfolder']}]",
                 filtering.tag_with_blur, pipeline_steps['agreed_json'], pipeline_steps['blur_csv'], tagged_json_intermediate, config
             )
+            step13b_name = f"Step 13b: Filter Tagged Data by Blur [{config['sa1b_subfolder']}]"
             pipeline_steps['restoration_json_intermediate'] = time_step(
                 f"Step 13b: Filter Tagged Data by Blur [{config['sa1b_subfolder']}]",
                 filtering.filter_tagged_by_blur, pipeline_steps['tagged_json_intermediate'], restoration_json_intermediate, config
             )
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
         elif 'tagged_json_intermediate' not in pipeline_steps:
              pipeline_steps['tagged_json_intermediate'] = tagged_json_intermediate
              pipeline_steps['restoration_json_intermediate'] = restoration_json_intermediate
 
 
         # --- Step 14: Final Formatting ---
+        current_stage_name = 'final_formatting'
         if should_run('final_formatting'):
+            step14a_name = f"Step 14a: Final Formatting (Full Dataset) [{config['sa1b_subfolder']}]"            
             pipeline_steps['full_dataset_final_json'] = time_step(
                 f"Step 14a: Final Formatting (Full Dataset) [{config['sa1b_subfolder']}]",
                 formatting.format_final_dataset, pipeline_steps['tagged_json_intermediate'], full_dataset_final_json, config
             )
+            step14b_name = f"Step 14b: Final Formatting (Restoration Dataset) [{config['sa1b_subfolder']}]"
             pipeline_steps['restoration_dataset_final_json'] = time_step(
                 f"Step 14b: Final Formatting (Restoration Dataset) [{config['sa1b_subfolder']}]",
                 formatting.format_final_dataset, pipeline_steps['restoration_json_intermediate'], restoration_dataset_final_json, config
             )
+            if args.run_only_stage == current_stage_name:
+                logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
+                sys.exit(0)
 
 
         logging.info(f"--- Pipeline Completed Successfully for {config['sa1b_subfolder']} ---")

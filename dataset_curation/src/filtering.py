@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from .utils import read_json, write_json, ensure_dir, read_text_list
 
-# --- Helper: Calculate Overlap (Copied from cropping.py for modularity) ---
+# --- Calculate Overlap (Copied from cropping.py for modularity) ---
 def calculate_overlap(region1, region2):
     """Calculate the IoU of two regions [x1, y1, x2, y2]."""
     x1 = max(region1[0], region2[0])
@@ -24,7 +24,7 @@ def calculate_overlap(region1, region2):
     union = area1 + area2 - intersection
     return intersection / union if union > 0 else 0.0
 
-# --- NEW: Filter Duplicate Detections ---
+# --- Filter 0: Duplicate Detections ---
 def filter_duplicate_detections(input_json_path, output_json_path, config, iou_threshold=0.9):
     """
     Filters out highly overlapping detections within the same image (crop).
@@ -82,7 +82,6 @@ def filter_duplicate_detections(input_json_path, output_json_path, config, iou_t
                     # Mark 'j' for removal.
                     kept_indices.remove(j)
                     duplicate_removed_count += 1
-                    # logging.debug(f"Removing ann {img_annotations[j]['id']} (score {img_annotations[j]['score']:.3f}) due to overlap {overlap:.3f} with ann {img_annotations[i]['id']} (score {img_annotations[i]['score']:.3f}) in {filename}")
 
         # Add annotations that were kept
         kept_this_image = []
@@ -105,8 +104,6 @@ def filter_duplicate_detections(input_json_path, output_json_path, config, iou_t
         # Only keep images that still have annotations after filtering
         if img_copy['instances'] > 0:
             updated_images.append(img_copy)
-        # else:
-            # logging.debug(f"Image {img['file_name']} removed (0 annotations after duplicate filtering).")
 
 
     output_data = {
@@ -119,8 +116,7 @@ def filter_duplicate_detections(input_json_path, output_json_path, config, iou_t
 
 # --- Filter 1: Empty/Invalid VLM Results ---
 def filter_empty_vlm(input_json_path, output_json_path, config):
-    """Filters annotations with empty or invalid VLM text. Minimal logging."""
-    # logging.info(f"Filtering empty/invalid VLM results from: {input_json_path}") # Included in time_step
+    """Filters annotations with empty or invalid VLM text."""
     data = read_json(input_json_path)
     if not data or "annotations" not in data:
         logging.error("Invalid JSON data for VLM filtering.") # Keep Error
@@ -162,15 +158,13 @@ def filter_empty_vlm(input_json_path, output_json_path, config):
     updated_images = list(images_dict.values())
     output_data = {"images": updated_images, "annotations": annotations_out}
     write_json(output_data, output_json_path)
-    # Keep Summary Info
     logging.info(f"VLM filtering complete. Kept {len(annotations_out)} annotations (removed {filtered_count}). Output: {output_json_path}")
     return output_json_path
 
 
 # --- Filter 2: Compare & Merge VLMs ---
 def compare_and_merge_vlms(vlm1_json_path, vlm2_json_path, output_json_path, config):
-    """Merges results from two VLM JSONs. Minimal logging."""
-    # logging.info(f"Comparing VLM results: {os.path.basename(vlm1_json_path)} and {os.path.basename(vlm2_json_path)}") # Included in time_step
+    """Merges results from two VLM JSONs."""
     data1 = read_json(vlm1_json_path)
     data2 = read_json(vlm2_json_path)
     vlm1_name = config['vlm1_name']
@@ -224,7 +218,6 @@ def compare_and_merge_vlms(vlm1_json_path, vlm2_json_path, output_json_path, con
 
     output_data = {"images": data1["images"], "annotations": merged_annotations}
     write_json(output_data, output_json_path)
-    # Keep Summary Info
     logging.info(f"VLM comparison merge complete. Total annotations: {len(merged_annotations)}. Output: {output_json_path}")
     return output_json_path
 
@@ -232,7 +225,6 @@ def compare_and_merge_vlms(vlm1_json_path, vlm2_json_path, output_json_path, con
 # --- Filter 3: Identify Fully Agreed Images ---
 def identify_agreed_images(combined_json_path, output_list_path, config):
     """Identifies images where both VLMs agree on all text instances. Minimal logging."""
-    # logging.info(f"Identifying images with full VLM agreement from: {combined_json_path}") # Included in time_step
     data = read_json(combined_json_path)
     vlm1_name = config['vlm1_name']
     vlm2_name = config['vlm2_name']
@@ -312,7 +304,6 @@ def extract_agreed_annotations(combined_json_path, agreed_list_path, output_json
             if instance_count > 0:
                 img_copy['instances'] = instance_count
                 final_images.append(img_copy)
-            # else: logging.debug(f"Image {img['file_name']} removed (0 annotations).") # REMOVED Debug
 
     final_kept_image_names = {img['file_name'] for img in final_images}
     final_annotations = [ann for img_anns in annotations_per_image.values() for ann in img_anns if ann['file_name'] in final_kept_image_names]
@@ -327,7 +318,6 @@ def extract_agreed_annotations(combined_json_path, agreed_list_path, output_json
 # --- Filter 5a: Tag with Blur Category ---
 def tag_with_blur(agreed_json_path, blur_csv_path, output_json_path, config):
     """Adds a 'blur_category' field to image entries. Minimal logging."""
-    # logging.info(f"Tagging images with blur categories from: {blur_csv_path}") # Included in time_step
     data = read_json(agreed_json_path)
     blur_vlm_name = config.get('blur_vlm_name', 'Qwen')
     expected_blur_col_name = f"{blur_vlm_name}_Blur"
@@ -341,7 +331,6 @@ def tag_with_blur(agreed_json_path, blur_csv_path, output_json_path, config):
     try:
         blur_df = pd.read_csv(blur_csv_path)
         actual_columns = blur_df.columns.tolist()
-        # logging.info(f"Columns found in blur CSV '{os.path.basename(blur_csv_path)}': {actual_columns}") # REMOVED Info
         actual_filename_col = None
         actual_blur_col = None
         for col in actual_columns:
@@ -354,13 +343,12 @@ def tag_with_blur(agreed_json_path, blur_csv_path, output_json_path, config):
             logging.error(f"Blur CSV ({os.path.basename(blur_csv_path)}) missing required columns: {', '.join(missing_cols_desc)}") # Keep Error
             logging.error(f"Actual columns found were: {actual_columns}") # Keep Error
             return None
-        # logging.info(f"Using CSV columns: Filename='{actual_filename_col}', BlurCategory='{actual_blur_col}'") # REMOVED Info
         blur_map = pd.Series(blur_df[actual_blur_col].values, index=blur_df[actual_filename_col])
+
         if blur_map.index.has_duplicates:
-            # logging.warning(f"Duplicate filenames found in '{actual_filename_col}' column of blur CSV. Keeping first entry.") # REMOVED Warning
             blur_map = blur_map[~blur_map.index.duplicated(keep='first')]
         blur_map = blur_map.to_dict()
-        # logging.info(f"Loaded blur data for {len(blur_map)} unique images from CSV.") # REMOVED Info
+
     except FileNotFoundError: logging.error(f"Blur CSV file not found: {blur_csv_path}"); return None # Keep Error
     except pd.errors.EmptyDataError: logging.error(f"Blur CSV file is empty: {blur_csv_path}"); return None # Keep Error
     except Exception as e: logging.error(f"Error reading or processing blur CSV {blur_csv_path}: {e}"); return None # Keep Error
@@ -392,7 +380,6 @@ def tag_with_blur(agreed_json_path, blur_csv_path, output_json_path, config):
 # --- Filter 5b: Filter Tagged Annotations by Blur ---
 def filter_tagged_by_blur(tagged_json_path, output_json_path, config):
     """Filters images/annotations based on image 'blur_category' tag. Minimal logging."""
-    # logging.info("Filtering tagged images/annotations based on blur category...") # Included in time_step
     data = read_json(tagged_json_path)
     blur_keep_category = config.get('blur_keep_category', 'Not blurry')
     if not data or "annotations" not in data or "images" not in data:
@@ -407,7 +394,6 @@ def filter_tagged_by_blur(tagged_json_path, output_json_path, config):
         if img.get("blur_category") == blur_keep_category:
             kept_images.append(img)
             kept_image_filenames.add(img["file_name"])
-        # else: logging.debug(f"Filtering out image {img['file_name']}...") # REMOVED Debug
 
     kept_annotations = []
     original_annotation_count = len(data["annotations"])
@@ -424,13 +410,11 @@ def filter_tagged_by_blur(tagged_json_path, output_json_path, config):
             img_copy['instances'] = instance_count
             final_kept_images.append(img_copy)
             final_kept_image_filenames.add(img['file_name'])
-        # else: logging.warning(f"Image {img['file_name']} removed (0 annotations).") # REMOVED Warning
 
     final_kept_annotations = [ann for ann in kept_annotations if ann['file_name'] in final_kept_image_filenames]
     output_data = {"images": final_kept_images, "annotations": final_kept_annotations}
     write_json(output_data, output_json_path)
     removed_image_count = original_image_count - len(final_kept_images)
     removed_annotation_count = original_annotation_count - len(final_kept_annotations)
-    # Keep Summary Info
     logging.info(f"Blur filtering complete. Kept {len(final_kept_images)} images (removed {removed_image_count}) and {len(final_kept_annotations)} annotations (removed {removed_annotation_count}) marked as '{blur_keep_category}'. Output: {output_json_path}")
     return output_json_path

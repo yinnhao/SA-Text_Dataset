@@ -13,9 +13,9 @@ bridge_weights_file: Bridge_tt.pth # Assumes it's in the bridge_repo_dir
 
 # --- Output Paths ---
 # Base directory where intermediate files and cropped images will be saved
-intermediate_output_base_dir: /media/dataset2/hyunbin/generated_data/SA-1B/ # <--- CHANGE THIS
+intermediate_output_base_dir: /media/dataset1/hyunbin/generated_data/SA-1B/ # <--- CHANGE THIS
 # Directory where the final dataset.json will be saved
-final_dataset_dir: /media/dataset2/hyunbin/generated_data/SA-1B/ # <--- CHANGE THIS
+final_dataset_dir: /media/dataset1/hyunbin/generated_data/SA-1B/ # <--- CHANGE THIS
 
 # --- Logging ---
 log_filename: "pipeline.log"          # Base name for the log file within intermediate_output_base_dir+suffix

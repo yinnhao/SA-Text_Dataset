@@ -29,7 +29,6 @@ def check_crop_validity(crop_region, instances):
     for instance in instances:
         bbox_abs = instance.get("bbox")
         if not (isinstance(bbox_abs, list) and len(bbox_abs) == 4):
-            # logging.warning(f"Skipping instance with invalid bbox format during validity check: {bbox_abs}") # REMOVED
             continue
         intersects = not (
             bbox_abs[2] <= crop_region[0] or bbox_abs[0] >= crop_region[2] or
@@ -40,7 +39,6 @@ def check_crop_validity(crop_region, instances):
             bbox_abs[1] >= crop_region[1] and bbox_abs[3] <= crop_region[3]
         )
         if intersects and not fully_contained:
-            # logging.debug(f"Crop region {crop_region} rejected: Cuts instance bbox {bbox_abs}") # REMOVED
             return False
     return True
 
@@ -50,8 +48,6 @@ def generate_sliding_window_crops(image_info, target_size, stride, max_instances
     candidates = []
     width, height = image_info["width"], image_info["height"]
     instances = image_info["instances"]
-    # img_name = image_info.get('file_name', 'Unknown')
-    # logging.debug(f"Generating sliding windows for image {img_name} ({width}x{height}) with {len(instances)} instances.") # REMOVED
 
     for y in range(0, height - target_size + 1, stride):
         for x in range(0, width - target_size + 1, stride):
@@ -65,9 +61,7 @@ def generate_sliding_window_crops(image_info, target_size, stride, max_instances
                             bbox_abs[1] >= crop_region[1] and bbox_abs[3] <= crop_region[3]):
                         count += 1
                 if 1 <= count <= max_instances:
-                    # logging.debug(f"Valid sliding window candidate {crop_region} found with {count} instances.") # REMOVED
                     candidates.append({"region": crop_region, "count": count})
-    # logging.debug(f"Generated {len(candidates)} sliding window candidate regions for image {img_name}.") # REMOVED
     return candidates
 
 
@@ -90,7 +84,6 @@ def identify_overlapping_instances(instances, overlap_threshold=0.1):
 def generate_adaptive_crops(image_info, target_size, max_instances):
     """Generates crops adaptively based on text clusters, falls back to sliding window."""
     img_name = image_info.get('file_name', 'Unknown')
-    # logging.debug(f"Attempting adaptive crop generation for {img_name}") # REMOVED
     width, height = image_info["width"], image_info["height"]
     instances = image_info["instances"]
     if not instances: return []
@@ -99,7 +92,6 @@ def generate_adaptive_crops(image_info, target_size, max_instances):
     non_overlapping = [inst for inst in instances if not inst.get("overlaps", False)]
 
     if len(non_overlapping) < 1:
-        # logging.debug(f"Too few non-overlapping instances ({len(non_overlapping)}), falling back to sliding window.") # REMOVED
         return generate_sliding_window_crops(image_info, target_size, stride=target_size // 4, max_instances=max_instances)
 
     centroids = []
@@ -110,7 +102,6 @@ def generate_adaptive_crops(image_info, target_size, max_instances):
         centroids.append([cx, cy])
 
     if not centroids:
-        # logging.debug("No valid centroids found, falling back to sliding window.") # REMOVED
         return generate_sliding_window_crops(image_info, target_size, stride=target_size // 4, max_instances=max_instances)
 
     X = np.array(centroids)
@@ -118,7 +109,7 @@ def generate_adaptive_crops(image_info, target_size, max_instances):
     else:
         max_dim = max(width, height)
         if max_dim == 0:
-            logging.warning(f"Image {img_name} has zero max dimension. Falling back to sliding window.") # Keep Warning
+            logging.warning(f"Image {img_name} has zero max dimension. Falling back to sliding window.") 
             return generate_sliding_window_crops(image_info, target_size, stride=target_size // 4, max_instances=max_instances)
         X_normalized = X / max_dim
         eps = 0.25 * target_size / max_dim
@@ -126,7 +117,7 @@ def generate_adaptive_crops(image_info, target_size, max_instances):
             clustering = DBSCAN(eps=eps, min_samples=1).fit(X_normalized)
             labels = clustering.labels_
         except Exception as dbscan_e:
-            logging.error(f"DBSCAN failed for {img_name}: {dbscan_e}. Falling back to sliding window.") # Keep Error
+            logging.error(f"DBSCAN failed for {img_name}: {dbscan_e}. Falling back to sliding window.")
             return generate_sliding_window_crops(image_info, target_size, stride=target_size // 4, max_instances=max_instances)
 
     clusters = {};
@@ -138,11 +129,9 @@ def generate_adaptive_crops(image_info, target_size, max_instances):
     for label, cluster_instances in clusters.items():
         if label == -1: continue
         if len(cluster_instances) > max_instances:
-            # logging.debug(f"Skipping cluster {label}: Too many instances ({len(cluster_instances)} > {max_instances})") # REMOVED
             continue
         valid_cluster_instances = [inst for inst in cluster_instances if isinstance(inst.get("bbox"), list) and len(inst["bbox"]) == 4]
         if not valid_cluster_instances:
-            # logging.warning(f"Cluster {label} has no instances with valid bboxes. Skipping.") # REMOVED Warning
             continue
         min_x = min(inst["bbox"][0] for inst in valid_cluster_instances); min_y = min(inst["bbox"][1] for inst in valid_cluster_instances)
         max_x = max(inst["bbox"][2] for inst in valid_cluster_instances); max_y = max(inst["bbox"][3] for inst in valid_cluster_instances)
@@ -163,14 +152,11 @@ def generate_adaptive_crops(image_info, target_size, max_instances):
                      bbox_abs[1] >= crop_region[1] and bbox_abs[3] <= crop_region[3]):
                      count += 1
             if 1 <= count <= max_instances:
-                # logging.debug(f"Valid adaptive candidate {crop_region} found with {count} instances (Cluster {label}).") # REMOVED
                 candidates.append({"region": crop_region, "count": count})
 
     if not candidates:
-        # logging.debug("No valid candidates from adaptive clustering, falling back to sliding window.") # REMOVED
         return generate_sliding_window_crops(image_info, target_size, stride=target_size // 4, max_instances=max_instances)
 
-    # logging.debug(f"Generated {len(candidates)} adaptive candidate regions for image {img_name}.") # REMOVED
     return candidates
 
 
@@ -212,14 +198,12 @@ def select_best_crops(candidates, instances, target_size, max_selections=3, dive
              cand["score"] = score_crop(cand, instances_in_region, target_size)
              cand["instance_ids"] = instance_ids_in_region
              scored_candidates.append(cand)
-             # logging.debug(f"Candidate {cand['region']} scored: {cand['score']:.3f} ({len(instances_in_region)} instances)") # REMOVED
 
     scored_candidates.sort(key=lambda x: x.get("score", 0), reverse=True)
     if not scored_candidates: return []
 
     selected = []; selected_instance_ids = set()
     top_candidate = scored_candidates[0]
-    # logging.debug(f"Top scored candidate: {top_candidate['region']} (Score: {top_candidate['score']:.3f})") # REMOVED
     selected.append(top_candidate)
     if "instance_ids" in top_candidate: selected_instance_ids.update(top_candidate["instance_ids"])
 
@@ -230,26 +214,22 @@ def select_best_crops(candidates, instances, target_size, max_selections=3, dive
             overlap = calculate_overlap(candidate["region"], sel_crop["region"])
             if overlap > diversity_threshold:
                 is_diverse_region = False
-                # logging.debug(f"Candidate {candidate['region']} rejected: Region overlaps > {diversity_threshold} with {sel_crop['region']}") # REMOVED
                 break
         if not is_diverse_region: continue
 
         is_diverse_instances = True
         candidate_instance_ids = candidate.get("instance_ids", set())
         if not candidate_instance_ids:
-             logging.warning(f"Candidate {candidate['region']} missing instance IDs during diversity check.") # Keep Warning
+             logging.warning(f"Candidate {candidate['region']} missing instance IDs during diversity check.") 
              continue
         if candidate_instance_ids.intersection(selected_instance_ids):
             is_diverse_instances = False
-            # logging.debug(f"Candidate {candidate['region']} rejected: Contains already selected instance IDs.") # REMOVED
 
         if not is_diverse_instances: continue
 
-        # logging.debug(f"Candidate {candidate['region']} selected (Score: {candidate['score']:.3f}, Diverse)") # REMOVED
         selected.append(candidate)
         selected_instance_ids.update(candidate_instance_ids)
 
-    # logging.debug(f"Selected {len(selected)} diverse crops.") # REMOVED
     final_selected = []
     for crop in selected:
          final_selected.append({"region": crop["region"], "count": crop.get("count", 0)})
@@ -261,10 +241,10 @@ def define_crop_regions(stage1_json_path, config):
     Reads Stage 1 detections, defines crop regions using adaptive clustering
     (with fallback to sliding window), and returns definitions.
     """
-    logging.info(f"Defining crop regions based on: {stage1_json_path}") # Keep INFO
+    logging.info(f"Defining crop regions based on: {stage1_json_path}") 
     data = read_json(stage1_json_path)
     if not data or "images" not in data or "annotations" not in data:
-        logging.error("Invalid Stage 1 JSON data.") # Keep Error
+        logging.error("Invalid Stage 1 JSON data.") 
         return []
 
     target_size = config['crop_size']
@@ -280,14 +260,12 @@ def define_crop_regions(stage1_json_path, config):
         if ann["file_name"] in image_annotations:
             if isinstance(ann.get("bbox"), list) and len(ann["bbox"]) == 4:
                  image_annotations[ann["file_name"]]["instances"].append(ann)
-            # else: logging.warning(f"Annotation ID {ann.get('id')} in {ann.get('file_name')} has invalid bbox format: {ann.get('bbox')}. Skipping.") # REMOVED Warning
 
     crop_definitions = []
     image_keys = list(image_annotations.keys())
-    for file_name in tqdm(image_keys, desc="Defining crops"): # Keep Progress Bar
+    for file_name in tqdm(image_keys, desc="Defining crops"):
         image_data = image_annotations[file_name]
         if image_data["width"] < target_size or image_data["height"] < target_size:
-            # logging.warning(f"Skipping {file_name}: dimensions smaller than target size."); continue # REMOVED Warning
             continue
         if not image_data["instances"]: continue
 
@@ -301,17 +279,17 @@ def define_crop_regions(stage1_json_path, config):
                 "original_image": file_name, "crop_id": crop_id, "crop_region": crop["region"]
             })
 
-    logging.info(f"Defined {len(crop_definitions)} crop regions.") # Keep INFO summary
+    logging.info(f"Defined {len(crop_definitions)} crop regions.") 
     return crop_definitions
 
 
 def create_crop_images(crop_definitions, sa1b_image_dir, output_crop_dir, config):
     """Creates and saves crop image files based on definitions."""
-    logging.info(f"Creating crop images in: {output_crop_dir}") # Keep INFO
+    logging.info(f"Creating crop images in: {output_crop_dir}") 
     ensure_dir(output_crop_dir)
     crop_path_map = {}
     quality = config.get('jpeg_quality', 95)
-    for definition in tqdm(crop_definitions, desc="Creating crop images"): # Keep Progress Bar
+    for definition in tqdm(crop_definitions, desc="Creating crop images"):
         original_image_path = os.path.join(sa1b_image_dir, definition["original_image"])
         crop_id = definition["crop_id"]; output_filename = f"{crop_id}.jpg"
         output_path = os.path.join(output_crop_dir, output_filename); crop_region = definition["crop_region"]
@@ -320,8 +298,8 @@ def create_crop_images(crop_definitions, sa1b_image_dir, output_crop_dir, config
                 img_rgb = img.convert("RGB"); cropped_img = img_rgb.crop(crop_region)
                 cropped_img.save(output_path, quality=quality); crop_path_map[crop_id] = output_path
         except FileNotFoundError:
-            logging.warning(f"Original image not found, skipping crop: {original_image_path}") # Keep Warning
+            logging.warning(f"Original image not found, skipping crop: {original_image_path}") 
         except Exception as e:
-            logging.error(f"Failed to create crop {output_filename} from {original_image_path}: {e}") # Keep Error
-    logging.info(f"Successfully created {len(crop_path_map)} crop images.") # Keep INFO summary
+            logging.error(f"Failed to create crop {output_filename} from {original_image_path}: {e}") 
+    logging.info(f"Successfully created {len(crop_path_map)} crop images.") 
     return crop_path_map
