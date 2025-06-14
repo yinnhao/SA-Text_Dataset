@@ -32,15 +32,12 @@ def time_step(step_name, func, *args, **kwargs):
 
 
 def main():
-    # --- MODIFIED: valid_stages ---
     valid_stages = [
         'start', 'cropping', 'bridge_stage2',
-        'filter_duplicates', # <-- ADDED NEW STAGE
-        'vlm1_recognition', 'vlm2_recognition',
+        'filter_duplicates', 'vlm1_recognition', 'vlm2_recognition',
         'vlm_filtering', 'vlm_comparison', 'agreement_extraction',
         'blur_assessment', 'blur_tag_filter', 'final_formatting'
     ]
-    # --- END MODIFICATION ---
 
     parser = argparse.ArgumentParser(description="SA-1B Text Restoration Dataset Curation Pipeline")
     parser.add_argument("--config", required=True, help="Path to the base configuration YAML file")
@@ -64,7 +61,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # --- Load Configuration FIRST ---
+    # --- Load Configuration ---
     try:
         with open(args.config, 'r') as f: config = yaml.safe_load(f)
         print(f"Loaded base configuration from: {args.config}")
@@ -106,8 +103,8 @@ def main():
     # Define intermediate/final file paths
     stage1_json = os.path.join(intermediate_dir, f"bridge_stage1_results{output_suffix}.json")
     crop_definitions_path = os.path.join(intermediate_dir, f"crop_definitions{output_suffix}.json")
-    stage2_raw_json = os.path.join(intermediate_dir, f"bridge_stage2_raw_results{output_suffix}.json") # Rename stage 2 output
-    stage2_filtered_json = os.path.join(intermediate_dir, f"bridge_stage2_filtered_results{output_suffix}.json") # New file after duplicate filter
+    stage2_raw_json = os.path.join(intermediate_dir, f"bridge_stage2_raw_results{output_suffix}.json") 
+    stage2_filtered_json = os.path.join(intermediate_dir, f"bridge_stage2_filtered_results{output_suffix}.json") 
     vlm1_raw_json = os.path.join(intermediate_dir, f"{config['vlm1_name']}_raw{output_suffix}.json")
     vlm2_raw_json = os.path.join(intermediate_dir, f"{config['vlm2_name']}_raw{output_suffix}.json")
     vlm1_filtered_json = os.path.join(intermediate_dir, f"{config['vlm1_name']}_filtered{output_suffix}.json")
@@ -148,32 +145,29 @@ def main():
             logging.error(f"Internal error: Invalid stage name '{stage_name}' used in should_run check.")
             return False
 
-    # --- MODIFIED: check_required_inputs ---
     def check_required_inputs(stage_name):
         logging.info(f"Checking required inputs for starting stage '{stage_name}'...")
         required_ok = True
         def check_and_set(key, path):
             nonlocal required_ok
             if not os.path.exists(path): logging.error(f"Missing required input for stage '{stage_name}': {path}"); required_ok = False
-            # else: pipeline_steps[key] = path
             return required_ok
         def check_dir_and_set(key, path):
              nonlocal required_ok
              if not os.path.isdir(path) or not os.listdir(path): logging.error(f"Missing required input for stage '{stage_name}': Populated directory {path}"); required_ok = False
-            #  else: pipeline_steps[key] = path
              return required_ok
 
         if stage_name == 'cropping': check_and_set('stage1_json', stage1_json)
         elif stage_name == 'bridge_stage2': check_dir_and_set('crop_image_dir', crop_image_dir)
-        elif stage_name == 'filter_duplicates': # Input for duplicate filter
-             check_and_set('stage2_raw_json', stage2_raw_json) # Expects the raw output
-        elif stage_name == 'vlm1_recognition': # Input for VLM1
-            check_and_set('stage2_filtered_json', stage2_filtered_json) # Expects filtered output
+        elif stage_name == 'filter_duplicates': 
+             check_and_set('stage2_raw_json', stage2_raw_json) 
+        elif stage_name == 'vlm1_recognition': 
+            check_and_set('stage2_filtered_json', stage2_filtered_json) 
             check_dir_and_set('crop_image_dir', crop_image_dir)
-        elif stage_name == 'vlm2_recognition': # Input for VLM2
-            check_and_set('stage2_filtered_json', stage2_filtered_json) # Expects filtered output
+        elif stage_name == 'vlm2_recognition':
+            check_and_set('stage2_filtered_json', stage2_filtered_json) 
             check_dir_and_set('crop_image_dir', crop_image_dir)
-            check_and_set('vlm1_raw_json', vlm1_raw_json) # Need VLM1 results
+            check_and_set('vlm1_raw_json', vlm1_raw_json) 
         elif stage_name == 'vlm_filtering':
             check_and_set('vlm1_raw_json', vlm1_raw_json)
             check_and_set('vlm2_raw_json', vlm2_raw_json)
@@ -192,7 +186,6 @@ def main():
 
         if not required_ok: logging.error(f"Cannot proceed from stage '{stage_name}' due to missing inputs."); sys.exit(1)
         else: logging.info(f"Required inputs for stage '{stage_name}' found.")
-    # --- END MODIFICATION ---
 
 
     # --- Main Pipeline Execution ---
@@ -280,7 +273,6 @@ def main():
                 sys.exit(0)
         elif 'stage2_raw_json' not in pipeline_steps: pipeline_steps['stage2_raw_json'] = stage2_raw_json
 
-        # --- ADDED: Step 4.5: Filter Duplicate Detections ---
         current_stage_name = 'filter_duplicates'
         if should_run('filter_duplicates'):
             pipeline_steps['stage2_filtered_json'] = time_step(
@@ -295,8 +287,6 @@ def main():
                 logging.info(f"Completed requested stage '{args.run_only_stage}'. Exiting pipeline.")
                 sys.exit(0)
         elif 'stage2_filtered_json' not in pipeline_steps: pipeline_steps['stage2_filtered_json'] = stage2_filtered_json
-        # --- END ADDED ---
-
 
         # --- Step 5: VLM 1 Recognition ---
         current_stage_name = 'vlm1_recognition'
