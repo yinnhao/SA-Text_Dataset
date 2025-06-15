@@ -3,6 +3,7 @@ import os
 import logging
 import shlex
 import time
+import sys
 
 from .utils import ensure_dir
 
@@ -18,13 +19,18 @@ def run_bridge(config, input_dir, output_dir, stage1=True):
     config_file = os.path.join(bridge_repo_dir, config['bridge_config_file'])
     weights_file = os.path.join(bridge_repo_dir, config['bridge_weights_file'])
     confidence = config['bridge_confidence_threshold']
-    python_cmd_str = config.get('bridge_env_python', 'python')
+    # python_cmd_str = config.get('bridge_env_python', 'python')
 
-    try:
-        python_cmd_parts = shlex.split(python_cmd_str)
-    except ValueError as e:
-        logging.error(f"Error parsing bridge_env_python command '{python_cmd_str}': {e}.")
-        return None
+    python_cmd_str = config.get("bridge_env_python", "").strip()
+
+    if python_cmd_str:                         # user explicitly requested a wrapper
+        try:
+            python_cmd_parts = shlex.split(python_cmd_str)
+        except ValueError as e:
+            logging.error(f"Error parsing bridge_env_python '{python_cmd_str}': {e}")
+            return None
+    else:                                      # single‑environment mode
+        python_cmd_parts = [sys.executable]    # call the same interpreter that runs the pipeline
 
     base_cmd = python_cmd_parts + [
         inference_script, "--config-file", config_file, "--input", input_dir,

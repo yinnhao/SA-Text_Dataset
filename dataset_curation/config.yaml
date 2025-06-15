@@ -2,20 +2,20 @@
 # Directory containing the original SA-1B image folders (e.g., sa_000000, sa_000001)
 sa1b_base_dir: /media/dataset2/hyunbin/SA-1B/
 # Specific SA-1B sub-folder to process (e.g., sa_000000) - Used to build full input path
-sa1b_subfolder: sa_000000
+sa1b_subfolder: pho
 
 # Path to the root of the Bridge Text Spotting repository
-bridge_repo_dir: /home/cvlab12/project/hyunbin/text_restoration/Bridging-Text-Spotting
+bridge_repo_dir: /home/cvlab12/project/hyunbin/text_restoration_dataset/Bridging-Text-Spotting
 # Path to the Bridge config file within the repo
 bridge_config_file: configs/Bridge/TotalText/R_50_poly.yaml
 # Path to the Bridge model weights file
-bridge_weights_file: Bridge_tt.pth # Assumes it's in the bridge_repo_dir
+bridge_weights_file: Bridge_tt.pth 
 
 # --- Output Paths ---
 # Base directory where intermediate files and cropped images will be saved
-intermediate_output_base_dir: /media/dataset2/hyunbin/generated_data/SA-1B_test/
+intermediate_output_base_dir: /media/dataset2/hyunbin/generated_data/SA-1B_pho/
 # Directory where the final dataset.json will be saved
-final_dataset_dir: /media/dataset2/hyunbin/generated_data/SA-1B_test/
+final_dataset_dir: /media/dataset2/hyunbin/generated_data/SA-1B_pho/
 
 # --- Logging ---
 log_filename: "pipeline.log"          # Base name for the log file within intermediate_output_base_dir+suffix
@@ -26,7 +26,8 @@ log_level_file: "DEBUG"               # Level for file (DEBUG, INFO, WARNING, ER
 # Command prefix to activate Bridge environment and run python
 # Example: "conda run -n Bridge python" or "/path/to/bridge_env/bin/python"
 # If empty, it assumes 'python' is correct in the activated Bridge env (requires manual activation before running main_pipeline.py)
-bridge_env_python: "conda run -n Bridge python"
+# bridge_env_python: "conda run -n Bridge python"
+bridge_env_python: "" 
 
 # Names for VLM models used in filenames and potentially internal logic
 vlm1_name: "OVIS"
