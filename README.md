@@ -1,4 +1,4 @@
-# Dataset Curation Pipeline
+# SA-Text Dataset Curation Pipeline
 <p align="center">
     <img src="assets/dataset_pipeline.jpg">
 </p>
