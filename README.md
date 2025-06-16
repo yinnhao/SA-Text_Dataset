@@ -2,6 +2,7 @@
 <p align="center">
     <img src="assets/dataset_pipeline.jpg">
 </p>
+
 This directory contains the scripts and configuration for the SA-Text dataset curation pipeline, from ["Text-Aware Image Restoration with Diffusion Models"](https://github.com/cvlab-kaist/TAIR). The pipeline processes images from the SA-1B dataset to generate a curated dataset for text restoration tasks.
 
 ## 1. Environment Setup
