@@ -5,7 +5,7 @@ sa1b_base_dir: /media/dataset2/hyunbin/SA-1B/
 sa1b_subfolder: pho
 
 # Path to the root of the Bridge Text Spotting repository
-bridge_repo_dir: /home/cvlab12/project/hyunbin/text_restoration_dataset/Bridging-Text-Spotting
+bridge_repo_dir: /home/cvlab12/project/hyunbin/test/text_restoration_dataset/Bridging-Text-Spotting
 # Path to the Bridge config file within the repo
 bridge_config_file: configs/Bridge/TotalText/R_50_poly.yaml
 # Path to the Bridge model weights file
