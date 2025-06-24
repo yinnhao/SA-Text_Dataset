@@ -97,3 +97,18 @@ python dataset_curation/main_pipeline.py \
   --output_suffix "_sa_000000" \
   --start_from vlm2_recognition
 ```
+## Citation
+
+If you find our work useful for your research, please consider citing it :)
+
+```
+@article{min2025text,
+  title={Text-Aware Image Restoration with Diffusion Models},
+  author={Min, Jaewon and Kim, Jin Hyeon and Cho, Paul Hyunbin and Lee, Jaeeun and Park, Jihye and Park, Minkyu and Kim, Sangpil and Park, Hyunhee and Kim, Seungryong},
+  journal={arXiv preprint arXiv:2506.09993},
+  year={2025}
+}
+```
+
+## Acknowledgements
+This pipeline integrates components from the [Bridging-Text-Spotting](https://github.com/mxin262/Bridging-Text-Spotting) repository. We sincerely thank the authors for making their code and models publicly available. Please refer to their repository for details on implementation, model weights, and license terms.
